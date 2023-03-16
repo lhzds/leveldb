@@ -215,7 +215,7 @@ class TableConstructor : public Constructor {
   Status FinishImpl(const Options& options, const KVMap& data) override {
     Reset();
     StringSink sink;
-    TableBuilder builder(options, &sink);
+    TableBuilder builder(options, 0, &sink);
 
     for (const auto& kvp : data) {
       builder.Add(kvp.first, kvp.second);

@@ -296,13 +296,13 @@ class Repairer {
     // new table over the source.
 
     // Create builder.
-    std::string copy = TableFileName(dbname_, next_file_number_++);
+    std::string copy = TableFileName(dbname_, next_file_number_);
     WritableFile* file;
     Status s = env_->NewWritableFile(copy, &file);
     if (!s.ok()) {
       return;
     }
-    TableBuilder* builder = new TableBuilder(options_, file);
+    TableBuilder* builder = new TableBuilder(options_, next_file_number_++, file);
 
     // Copy data.
     Iterator* iter = NewTableIterator(t.meta);

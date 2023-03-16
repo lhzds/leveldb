@@ -62,8 +62,8 @@ struct TableBuilder::Rep {
   std::string compressed_output;
 };
 
-TableBuilder::TableBuilder(const Options& options, WritableFile* file)
-    : rep_(new Rep(options, file)) {
+TableBuilder::TableBuilder(const Options& options, size_t file_number, WritableFile* file)
+    : rep_(new Rep(options, file)), file_number_(file_number) {
   if (rep_->filter_block != nullptr) {
     rep_->filter_block->StartBlock(0);
   }
