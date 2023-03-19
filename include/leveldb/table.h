@@ -9,6 +9,7 @@
 
 #include "leveldb/export.h"
 #include "leveldb/iterator.h"
+#include "pmem_btree/pmem_index.h"
 
 namespace leveldb {
 
@@ -38,7 +39,7 @@ class LEVELDB_EXPORT Table {
   //
   // *file must remain live while this Table is in use.
   static Status Open(const Options& options, RandomAccessFile* file,
-                     uint64_t file_size, Table** table);
+                     uint64_t file_size, Table** table, uint64_t file_number, pmem_index::PMIndex* pm_index);
 
   Table(const Table&) = delete;
   Table& operator=(const Table&) = delete;
@@ -73,8 +74,8 @@ class LEVELDB_EXPORT Table {
                      void (*handle_result)(void* arg, const Slice& k,
                                            const Slice& v));
 
-  void ReadMeta(const Footer& footer);
-  void ReadFilter(const Slice& filter_handle_value);
+  void ReadMeta(const Footer& footer, std::string_view pm_metadata);
+  void ReadFilter(const Slice& filter_handle_value, std::string_view pm_metadata);
 
   Rep* const rep_;
 };

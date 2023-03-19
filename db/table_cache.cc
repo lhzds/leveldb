@@ -8,6 +8,7 @@
 #include "leveldb/env.h"
 #include "leveldb/table.h"
 #include "util/coding.h"
+#include "pmem_btree/pmem_index.h"
 
 namespace leveldb {
 
@@ -30,11 +31,12 @@ static void UnrefEntry(void* arg1, void* arg2) {
 }
 
 TableCache::TableCache(const std::string& dbname, const Options& options,
-                       int entries)
+                       int entries, pmem_index::PMIndex* pm_index)
     : env_(options.env),
       dbname_(dbname),
       options_(options),
-      cache_(NewLRUCache(entries)) {}
+      cache_(NewLRUCache(entries)),
+      pm_index_(pm_index) {}
 
 TableCache::~TableCache() { delete cache_; }
 
@@ -57,7 +59,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       }
     }
     if (s.ok()) {
-      s = Table::Open(options_, file, file_size, &table);
+      s = Table::Open(options_, file, file_size, &table, file_number, pm_index_);
     }
 
     if (!s.ok()) {

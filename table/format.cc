@@ -9,6 +9,7 @@
 #include "table/block.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
+#include "pmem_btree/pmem_index.h"
 
 namespace leveldb {
 
@@ -62,7 +63,7 @@ Status Footer::DecodeFrom(Slice* input) {
 }
 
 Status ReadBlock(RandomAccessFile* file, const ReadOptions& options,
-                 const BlockHandle& handle, BlockContents* result) {
+                 const BlockHandle& handle, BlockContents* result, std::string_view pm_metadata) {
   result->data = Slice();
   result->cachable = false;
   result->heap_allocated = false;
@@ -71,8 +72,16 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options,
   // See table_builder.cc for the code that built this structure.
   size_t n = static_cast<size_t>(handle.size());
   char* buf = new char[n + kBlockTrailerSize];
+  
+  Status s;
   Slice contents;
-  Status s = file->Read(handle.offset(), n + kBlockTrailerSize, &contents, buf);
+  if (pm_metadata.empty()) {
+    Status s = file->Read(handle.offset(), n + kBlockTrailerSize, &contents, buf);
+  } else {
+    contents = Slice(pm_metadata.data() + handle.offset(), handle.size());
+  }
+  
+  
   if (!s.ok()) {
     delete[] buf;
     return s;

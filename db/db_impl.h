@@ -18,6 +18,8 @@
 #include "port/port.h"
 #include "port/thread_annotations.h"
 
+#include "pmem_btree/pmem_index.h"
+
 namespace leveldb {
 
 class MemTable;
@@ -164,6 +166,8 @@ class DBImpl : public DB {
   const bool owns_cache_;
   const std::string dbname_;
 
+  pmem_index::PMIndex* pm_index_;
+  
   // table_cache_ provides its own synchronization
   TableCache* const table_cache_;
 

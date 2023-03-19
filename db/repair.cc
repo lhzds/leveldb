@@ -37,6 +37,7 @@
 #include "leveldb/comparator.h"
 #include "leveldb/db.h"
 #include "leveldb/env.h"
+#include "pmem_btree/pmem_index.h"
 
 namespace leveldb {
 
@@ -52,13 +53,15 @@ class Repairer {
         options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options)),
         owns_info_log_(options_.info_log != options.info_log),
         owns_cache_(options_.block_cache != options.block_cache),
-        next_file_number_(1) {
+        next_file_number_(1),
+        pm_index_(new pmem_index::PMIndex) {
     // TableCache can be small since we expect each table to be opened once.
-    table_cache_ = new TableCache(dbname_, options_, 10);
+    table_cache_ = new TableCache(dbname_, options_, 10, pm_index_);
   }
 
   ~Repairer() {
     delete table_cache_;
+    delete pm_index_;
     if (owns_info_log_) {
       delete options_.info_log;
     }
@@ -203,7 +206,7 @@ class Repairer {
     FileMetaData meta;
     meta.number = next_file_number_++;
     Iterator* iter = mem->NewIterator();
-    status = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
+    status = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta, pm_index_);
     delete iter;
     mem->Unref();
     mem = nullptr;
@@ -302,7 +305,8 @@ class Repairer {
     if (!s.ok()) {
       return;
     }
-    TableBuilder* builder = new TableBuilder(options_, next_file_number_++, file);
+    
+    TableBuilder* builder = new TableBuilder(options_, next_file_number_++, file, pm_index_);
 
     // Copy data.
     Iterator* iter = NewTableIterator(t.meta);
@@ -440,6 +444,7 @@ class Repairer {
   std::vector<uint64_t> logs_;
   std::vector<TableInfo> tables_;
   uint64_t next_file_number_;
+  pmem_index::PMIndex* pm_index_;
 };
 }  // namespace
 

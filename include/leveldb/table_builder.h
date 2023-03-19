@@ -19,6 +19,8 @@
 #include "leveldb/options.h"
 #include "leveldb/status.h"
 
+#include "pmem_btree/pmem_index.h"
+
 namespace leveldb {
 
 class BlockBuilder;
@@ -30,7 +32,7 @@ class LEVELDB_EXPORT TableBuilder {
   // Create a builder that will store the contents of the table it is
   // building in *file.  Does not close the file.  It is up to the
   // caller to close the file after calling Finish().
-  TableBuilder(const Options& options, uint64_t file_number, WritableFile* file);
+  TableBuilder(const Options& options, uint64_t file_number, WritableFile* file, pmem_index::PMIndex* pm_indx);
 
   TableBuilder(const TableBuilder&) = delete;
   TableBuilder& operator=(const TableBuilder&) = delete;
@@ -81,12 +83,12 @@ class LEVELDB_EXPORT TableBuilder {
 
  private:
   bool ok() const { return status().ok(); }
-  void WriteBlock(BlockBuilder* block, BlockHandle* handle);
-  void WriteRawBlock(const Slice& data, CompressionType, BlockHandle* handle);
+  void WriteBlock(BlockBuilder* block, BlockHandle* handle, bool writeToBuffer=false);
+  void WriteRawBlock(const Slice& data, CompressionType, BlockHandle* handle, bool writeToBuffer=false);
+  void SetBlockTrailer(char* trailer, const Slice& block_contents, CompressionType type);
 
   struct Rep;
   Rep* rep_;
-  uint64_t file_number_;
 };
 
 }  // namespace leveldb

@@ -18,12 +18,13 @@
 #include "leveldb/table.h"
 #include "leveldb/write_batch.h"
 #include "util/logging.h"
+#include "pmem_btree/pmem_index.h"
 
 namespace leveldb {
 
 namespace {
 
-bool GuessType(const std::string& fname, FileType* type) {
+bool GuessType(const std::string& fname, FileType* type, uint64_t* number) {
   size_t pos = fname.rfind('/');
   std::string basename;
   if (pos == std::string::npos) {
@@ -31,8 +32,7 @@ bool GuessType(const std::string& fname, FileType* type) {
   } else {
     basename = std::string(fname.data() + pos + 1, fname.size() - pos - 1);
   }
-  uint64_t ignored;
-  return ParseFileName(basename, &ignored, type);
+  return ParseFileName(basename, number, type);
 }
 
 // Notified when log reader encounters corruption.
@@ -144,7 +144,7 @@ Status DumpDescriptor(Env* env, const std::string& fname, WritableFile* dst) {
   return PrintLogContents(env, fname, VersionEditPrinter, dst);
 }
 
-Status DumpTable(Env* env, const std::string& fname, WritableFile* dst) {
+Status DumpTable(Env* env, const std::string& fname, WritableFile* dst, uint64_t file_number) {
   uint64_t file_size;
   RandomAccessFile* file = nullptr;
   Table* table = nullptr;
@@ -157,7 +157,9 @@ Status DumpTable(Env* env, const std::string& fname, WritableFile* dst) {
     // comparator used in this database. However this should not cause
     // problems since we only use Table operations that do not require
     // any comparisons.  In particular, we do not call Seek or Prev.
-    s = Table::Open(Options(), file, file_size, &table);
+    pmem_index::PMIndex* pm_index = new pmem_index::PMIndex;
+    s = Table::Open(Options(), file, file_size, &table, file_number, pm_index);
+    delete pm_index;
   }
   if (!s.ok()) {
     delete table;
@@ -213,7 +215,8 @@ Status DumpTable(Env* env, const std::string& fname, WritableFile* dst) {
 
 Status DumpFile(Env* env, const std::string& fname, WritableFile* dst) {
   FileType ftype;
-  if (!GuessType(fname, &ftype)) {
+  uint64_t file_number;
+  if (!GuessType(fname, &ftype, &file_number)) {
     return Status::InvalidArgument(fname + ": unknown file type");
   }
   switch (ftype) {
@@ -222,7 +225,7 @@ Status DumpFile(Env* env, const std::string& fname, WritableFile* dst) {
     case kDescriptorFile:
       return DumpDescriptor(env, fname, dst);
     case kTableFile:
-      return DumpTable(env, fname, dst);
+      return DumpTable(env, fname, dst, file_number);
     default:
       break;
   }

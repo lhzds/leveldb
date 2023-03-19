@@ -132,7 +132,8 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       owns_info_log_(options_.info_log != raw_options.info_log),
       owns_cache_(options_.block_cache != raw_options.block_cache),
       dbname_(dbname),
-      table_cache_(new TableCache(dbname_, options_, TableCacheSize(options_))),
+      pm_index_(new pmem_index::PMIndex),
+      table_cache_(new TableCache(dbname_, options_, TableCacheSize(options_), pm_index_)),
       db_lock_(nullptr),
       shutting_down_(false),
       background_work_finished_signal_(&mutex_),
@@ -176,6 +177,8 @@ DBImpl::~DBImpl() {
   if (owns_cache_) {
     delete options_.block_cache;
   }
+
+  delete pm_index_;
 }
 
 Status DBImpl::NewDB() {
@@ -516,7 +519,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   Status s;
   {
     mutex_.Unlock();
-    s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
+    s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta, pm_index_);
     mutex_.Lock();
   }
 
@@ -817,7 +820,7 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
   std::string fname = TableFileName(dbname_, file_number);
   Status s = env_->NewWritableFile(fname, &compact->outfile);
   if (s.ok()) {
-    compact->builder = new TableBuilder(options_, file_number, compact->outfile);
+    compact->builder = new TableBuilder(options_, file_number, compact->outfile, pm_index_);
   }
   return s;
 }

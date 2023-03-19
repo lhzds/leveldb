@@ -3,17 +3,21 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "leveldb/table.h"
+#include "db/memtable.h"
+#include <string>
 
 #include "leveldb/cache.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
+#include "leveldb/slice.h"
 #include "table/block.h"
 #include "table/filter_block.h"
 #include "table/format.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
+#include "pmem_btree/pmem_index.h"
 
 namespace leveldb {
 
@@ -36,17 +40,24 @@ struct Table::Rep {
 };
 
 Status Table::Open(const Options& options, RandomAccessFile* file,
-                   uint64_t size, Table** table) {
+                   uint64_t size, Table** table, uint64_t file_number, pmem_index::PMIndex* pm_index) {
   *table = nullptr;
   if (size < Footer::kEncodedLength) {
     return Status::Corruption("file is too short to be an sstable");
   }
 
-  char footer_space[Footer::kEncodedLength];
+  Status s;
   Slice footer_input;
-  Status s = file->Read(size - Footer::kEncodedLength, Footer::kEncodedLength,
-                        &footer_input, footer_space);
-  if (!s.ok()) return s;
+  std::string_view pm_metadata;
+  char footer_space[Footer::kEncodedLength];
+
+  if (pm_index != nullptr) {
+    pm_metadata = pm_index->Get(file_number);
+    footer_input = Slice(pm_metadata.data() + pm_metadata.size() - Footer::kEncodedLength, Footer::kEncodedLength);
+  } else {
+    s = file->Read(size - Footer::kEncodedLength, Footer::kEncodedLength,
+    &footer_input, footer_space);
+  }
 
   Footer footer;
   s = footer.DecodeFrom(&footer_input);
@@ -58,7 +69,8 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
   if (options.paranoid_checks) {
     opt.verify_checksums = true;
   }
-  s = ReadBlock(file, opt, footer.index_handle(), &index_block_contents);
+  
+  s = ReadBlock(file, opt, footer.index_handle(), &index_block_contents, pm_metadata);
 
   if (s.ok()) {
     // We've successfully read the footer and the index block: we're
@@ -73,13 +85,13 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
     rep->filter_data = nullptr;
     rep->filter = nullptr;
     *table = new Table(rep);
-    (*table)->ReadMeta(footer);
+    (*table)->ReadMeta(footer, pm_metadata);
   }
 
   return s;
 }
 
-void Table::ReadMeta(const Footer& footer) {
+void Table::ReadMeta(const Footer& footer, std::string_view pm_metadata) {
   if (rep_->options.filter_policy == nullptr) {
     return;  // Do not need any metadata
   }
@@ -91,7 +103,7 @@ void Table::ReadMeta(const Footer& footer) {
     opt.verify_checksums = true;
   }
   BlockContents contents;
-  if (!ReadBlock(rep_->file, opt, footer.metaindex_handle(), &contents).ok()) {
+  if (!ReadBlock(rep_->file, opt, footer.metaindex_handle(), &contents, pm_metadata).ok()) {
     // Do not propagate errors since meta info is not needed for operation
     return;
   }
@@ -102,13 +114,13 @@ void Table::ReadMeta(const Footer& footer) {
   key.append(rep_->options.filter_policy->Name());
   iter->Seek(key);
   if (iter->Valid() && iter->key() == Slice(key)) {
-    ReadFilter(iter->value());
+    ReadFilter(iter->value(), pm_metadata);
   }
   delete iter;
   delete meta;
 }
 
-void Table::ReadFilter(const Slice& filter_handle_value) {
+void Table::ReadFilter(const Slice& filter_handle_value, std::string_view pm_metadata) {
   Slice v = filter_handle_value;
   BlockHandle filter_handle;
   if (!filter_handle.DecodeFrom(&v).ok()) {
@@ -122,7 +134,7 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
     opt.verify_checksums = true;
   }
   BlockContents block;
-  if (!ReadBlock(rep_->file, opt, filter_handle, &block).ok()) {
+  if (!ReadBlock(rep_->file, opt, filter_handle, &block, pm_metadata).ok()) {
     return;
   }
   if (block.heap_allocated) {
@@ -174,7 +186,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
       if (cache_handle != nullptr) {
         block = reinterpret_cast<Block*>(block_cache->Value(cache_handle));
       } else {
-        s = ReadBlock(table->rep_->file, options, handle, &contents);
+        s = ReadBlock(table->rep_->file, options, handle, &contents, std::string_view());
         if (s.ok()) {
           block = new Block(contents);
           if (contents.cachable && options.fill_cache) {
@@ -184,7 +196,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
         }
       }
     } else {
-      s = ReadBlock(table->rep_->file, options, handle, &contents);
+      s = ReadBlock(table->rep_->file, options, handle, &contents, std::string_view());
       if (s.ok()) {
         block = new Block(contents);
       }

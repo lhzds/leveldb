@@ -14,6 +14,7 @@
 #include "leveldb/cache.h"
 #include "leveldb/table.h"
 #include "port/port.h"
+#include "pmem_btree/pmem_index.h"
 
 namespace leveldb {
 
@@ -21,7 +22,7 @@ class Env;
 
 class TableCache {
  public:
-  TableCache(const std::string& dbname, const Options& options, int entries);
+  TableCache(const std::string& dbname, const Options& options, int entries, pmem_index::PMIndex* pm_index);
 
   TableCache(const TableCache&) = delete;
   TableCache& operator=(const TableCache&) = delete;
@@ -54,6 +55,7 @@ class TableCache {
   const std::string dbname_;
   const Options& options_;
   Cache* cache_;
+  pmem_index::PMIndex* pm_index_;
 };
 
 }  // namespace leveldb
