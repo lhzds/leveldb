@@ -34,6 +34,7 @@
 #include "util/coding.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
+#include "pmem_btree/pmem_index.h"
 
 namespace leveldb {
 
@@ -1566,6 +1567,12 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
         }
       }
     }
+
+    Status del = env->RemoveFile(pmem_index::kDefaultPmPath);
+    if (result.ok() && !del.ok()) {
+      result = del;
+    }
+
     env->UnlockFile(lock);  // Ignore error since state is already gone
     env->RemoveFile(lockname);
     env->RemoveDir(dbname);  // Ignore error in case dir contains other files
