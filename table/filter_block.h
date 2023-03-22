@@ -38,6 +38,8 @@ class FilterBlockBuilder {
   void AddKey(const Slice& key);
   Slice Finish();
 
+  std::string& ActualContent() { return result_; }
+
  private:
   void GenerateFilter();
 

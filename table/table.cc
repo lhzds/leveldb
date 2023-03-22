@@ -53,6 +53,8 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
 
   if (pm_index != nullptr) {
     pm_metadata = pm_index->Get(file_number);
+    assert(!pm_metadata.empty());
+    
     footer_input = Slice(pm_metadata.data() + pm_metadata.size() - Footer::kEncodedLength, Footer::kEncodedLength);
   } else {
     s = file->Read(size - Footer::kEncodedLength, Footer::kEncodedLength,

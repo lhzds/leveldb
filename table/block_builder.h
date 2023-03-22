@@ -40,6 +40,8 @@ class BlockBuilder {
   // Return true iff no entries have been added since the last Reset()
   bool empty() const { return buffer_.empty(); }
 
+  std::string& ActualContent() { return buffer_; }
+
  private:
   const Options* options_;
   std::string buffer_;              // Destination buffer

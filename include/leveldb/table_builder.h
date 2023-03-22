@@ -84,7 +84,8 @@ class LEVELDB_EXPORT TableBuilder {
  private:
   bool ok() const { return status().ok(); }
   void WriteBlock(BlockBuilder* block, BlockHandle* handle, bool writeToBuffer=false);
-  void WriteRawBlock(const Slice& data, CompressionType, BlockHandle* handle, bool writeToBuffer=false);
+  void WriteRawBlock(const Slice& data, CompressionType, BlockHandle* handle);
+  void WriteRawBlockToBuf(std::string &block_contents, CompressionType type, BlockHandle* handle);
   void SetBlockTrailer(char* trailer, const Slice& block_contents, CompressionType type);
 
   struct Rep;

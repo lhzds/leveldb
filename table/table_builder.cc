@@ -67,8 +67,7 @@ struct TableBuilder::Rep {
   std::string compressed_output;
 
   size_t pm_offset;
-  std::vector<std::string_view> blocks_buf;
-  std::vector<std::array<char, kBlockTrailerSize>> trailers_buf;
+  std::vector<std::string> data_buf;
   pmem_index::PMIndex* pm_index;
 };
 
@@ -158,6 +157,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle, bool wri
   Slice raw = block->Finish();
 
   Slice block_contents;
+  bool isCompressed = false;
   CompressionType type = r->options.compression;
   // TODO(postrelease): Support more compression options: zlib?
   switch (type) {
@@ -170,6 +170,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle, bool wri
       if (port::Snappy_Compress(raw.data(), raw.size(), compressed) &&
           compressed->size() < raw.size() - (raw.size() / 8u)) {
         block_contents = *compressed;
+        isCompressed = true;
       } else {
         // Snappy not supported, or compressed less than 12.5%, so just
         // store uncompressed form
@@ -179,28 +180,40 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle, bool wri
       break;
     }
   }
-  WriteRawBlock(block_contents, type, handle, writeToBuffer);
+
+  if (writeToBuffer && r->pm_index != nullptr) {
+    if (isCompressed) {
+      WriteRawBlockToBuf(r->compressed_output, type, handle);
+    } else {
+      WriteRawBlockToBuf(block->ActualContent(), type, handle);
+    }
+  } else {
+    WriteRawBlock(block_contents, type, handle);
+  }
+
   r->compressed_output.clear();
   block->Reset();
 }
 
-void TableBuilder::WriteRawBlock(const Slice& block_contents,
-                                 CompressionType type, BlockHandle* handle, bool writeToBuffer) {
-
+void TableBuilder::WriteRawBlockToBuf(std::string &block_contents, CompressionType type, BlockHandle* handle) {
   Rep* r = rep_;
+  assert(r->pm_index != nullptr);
 
-  if (writeToBuffer && r->pm_index != nullptr) {
-    rep_->blocks_buf.emplace_back(block_contents.data(), block_contents.size());
-    rep_->trailers_buf.emplace_back();
-    SetBlockTrailer(rep_->trailers_buf.back().data(), block_contents, kNoCompression);
-    rep_->blocks_buf.emplace_back(rep_->trailers_buf.back().data(), kBlockTrailerSize);
+  handle->set_offset(r->pm_offset);
+  handle->set_size(block_contents.size());
+  r->pm_offset += block_contents.size() + kBlockTrailerSize;
 
-    if (handle == nullptr) return;
-    handle->set_size(block_contents.size() + kBlockTrailerSize);
-    handle->set_offset(rep_->pm_offset);
-    rep_->pm_offset += block_contents.size() + kBlockTrailerSize;
-    return;
-  }
+  std::string trailer(kBlockTrailerSize, 0);
+  SetBlockTrailer(trailer.data(), block_contents, type);
+  r->data_buf.emplace_back(std::move(block_contents));
+  r->data_buf.emplace_back(std::move(trailer));
+
+  return;
+}
+
+void TableBuilder::WriteRawBlock(const Slice& block_contents,
+                                 CompressionType type, BlockHandle* handle) {
+  Rep* r = rep_;
 
   handle->set_offset(r->offset);
   handle->set_size(block_contents.size());
@@ -234,7 +247,12 @@ Status TableBuilder::Finish() {
 
   // Write filter block
   if (ok() && r->filter_block != nullptr) {
-    WriteRawBlock(r->filter_block->Finish(),  kNoCompression, &filter_block_handle, true);
+    if (r->pm_index == nullptr) {
+      WriteRawBlock(r->filter_block->Finish(),  kNoCompression, &filter_block_handle);
+    } else {
+      r->filter_block->Finish();
+      WriteRawBlockToBuf(r->filter_block->ActualContent(), kNoCompression, &filter_block_handle);
+    }
   }
 
   // Write metaindex block
@@ -272,16 +290,22 @@ Status TableBuilder::Finish() {
     footer.set_index_handle(index_block_handle);
     std::string footer_encoding;
     footer.EncodeTo(&footer_encoding);
-    // r->status = r->file->Append(footer_encoding);
-    r->blocks_buf.emplace_back(footer_encoding.data(), footer_encoding.size());
-    if (r->status.ok()) {
+    
+    if (r->pm_index == nullptr) {
+      r->status = r->file->Append(footer_encoding);
+      if (r->status.ok()) {
+        r->offset += footer_encoding.size();
+      }
+    } else {
+      r->data_buf.emplace_back(std::move(footer_encoding));
       r->pm_offset += footer_encoding.size();
     }
   }
 
   // Flush to pm
-  r->pm_index->Put(r->file_number, r->blocks_buf);
-
+  r->pm_index->Put(r->file_number, r->data_buf);
+  r->data_buf.clear();
+  
   return r->status;
 }
 

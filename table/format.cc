@@ -78,7 +78,7 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options,
   if (pm_metadata.empty()) {
     Status s = file->Read(handle.offset(), n + kBlockTrailerSize, &contents, buf);
   } else {
-    contents = Slice(pm_metadata.data() + handle.offset(), handle.size());
+    contents = Slice(pm_metadata.data() + handle.offset(), n + kBlockTrailerSize);
   }
   
   
