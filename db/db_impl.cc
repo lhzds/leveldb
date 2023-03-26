@@ -34,7 +34,7 @@
 #include "util/coding.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
-#include "pmem_btree/pmem_index.h"
+#include "pmem_index.h"
 
 namespace leveldb {
 

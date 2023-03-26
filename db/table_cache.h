@@ -14,7 +14,7 @@
 #include "leveldb/cache.h"
 #include "leveldb/table.h"
 #include "port/port.h"
-#include "pmem_btree/pmem_index.h"
+#include "pmem_index.h"
 
 namespace leveldb {
 

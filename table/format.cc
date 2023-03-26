@@ -9,7 +9,7 @@
 #include "table/block.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
-#include "pmem_btree/pmem_index.h"
+#include "pmem_index.h"
 
 namespace leveldb {
 

@@ -18,7 +18,7 @@
 #include "port/port.h"
 #include "port/thread_annotations.h"
 
-#include "pmem_btree/pmem_index.h"
+#include "pmem_index.h"
 
 namespace leveldb {
 

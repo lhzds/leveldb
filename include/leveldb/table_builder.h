@@ -19,7 +19,7 @@
 #include "leveldb/options.h"
 #include "leveldb/status.h"
 
-#include "pmem_btree/pmem_index.h"
+#include "pmem_index.h"
 
 namespace leveldb {
 

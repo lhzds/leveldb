@@ -120,8 +120,8 @@ include(GNUInstallDirs)
 
 add_library(leveldb "")
 
-add_subdirectory(pmem_btree)
-include_directories(pmem_index)
+add_subdirectory(third_party/pmem_btree)
+include_directories(third_party/pmem_btree)
 target_link_libraries(leveldb pmindex)
 
 target_sources(leveldb

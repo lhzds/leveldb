@@ -5,5 +5,5 @@
 	path = third_party/benchmark
 	url = https://github.com/google/benchmark
 [submodule "pmem_btree"]
-	path = pmem_btree
+	path = third_party/pmem_btree
 	url = git@github.com:lhzds/pmem_btree.git
